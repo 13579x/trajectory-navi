@@ -1,0 +1,10 @@
+streamlit>=1.30
+requests
+pandas
+openpyxl
+pyshp>=2.3
+folium>=0.15
+osmnx>=2.0
+streamlit-folium
+matplotlib
+contextily
