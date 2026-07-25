@@ -120,9 +120,11 @@ with tab_map:
 
     c_map, c_form = st.columns([5, 3])
     with c_map:
-        center = st.session_state.get("picker_center", [25.04, 102.71])
-        zoom = st.session_state.get("picker_zoom", 12)
-        fmap = folium.Map(location=center, zoom_start=zoom, control_scale=True)
+        # 底图只建一次且不再改动 -> 组件不重挂载, 缩放/平移由浏览器端保持, 不会刷新
+        if "picker_base" not in st.session_state:
+            st.session_state.picker_base = folium.Map(
+                location=[30.0, 105.0], zoom_start=5, control_scale=True)
+        fg = folium.FeatureGroup(name="选点")
         for i, p in enumerate(picked):
             folium.Marker(
                 [p["lat"], p["lon"]], tooltip=f"{i + 1}. {p['name']}",
@@ -131,18 +133,16 @@ with tab_map:
                     f'width:24px;height:24px;line-height:24px;text-align:center;'
                     f'font-size:12px;font-weight:bold;border:2px solid #fff;'
                     f'box-shadow:0 1px 3px rgba(0,0,0,.4)">{i + 1}</div>'),
-                    icon_size=(24, 24), icon_anchor=(12, 12))).add_to(fmap)
+                    icon_size=(24, 24), icon_anchor=(12, 12))).add_to(fg)
         lc_prev = st.session_state.get("picker_last")
         if lc_prev:
             folium.Marker([lc_prev["lat"], lc_prev["lng"]], tooltip="待添加",
-                          icon=folium.Icon(color="orange", icon="plus")).add_to(fmap)
-        mout = st_folium(fmap, height=450, use_container_width=True, key="picker",
-                         returned_objects=["last_clicked", "center", "zoom"])
+                          icon=folium.Icon(color="orange", icon="plus")).add_to(fg)
+        mout = st_folium(st.session_state.picker_base, height=450,
+                         use_container_width=True, key="picker",
+                         feature_group_to_add=fg,
+                         returned_objects=["last_clicked"])
         if mout:
-            if mout.get("center"):
-                st.session_state.picker_center = [mout["center"]["lat"], mout["center"]["lng"]]
-            if mout.get("zoom"):
-                st.session_state.picker_zoom = mout["zoom"]
             lc_new = mout.get("last_clicked")
             if (lc_new and lc_new != lc_prev
                     and lc_new != st.session_state.get("picker_consumed")):
