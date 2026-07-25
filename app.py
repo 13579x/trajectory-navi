@@ -83,17 +83,19 @@ with st.sidebar:
     prefix = st.text_input("导出文件名前缀", "navi").strip() or "navi"
 
 # ---------------- 输入区 ----------------
-tab_text, tab_file, tab_map = st.tabs(
-    ["✍️ 直接输入", "📄 批量导入（CSV / Excel）", "🗺️ 地图选点"])
+input_mode = st.radio(
+    "输入方式", ["✍️ 直接输入", "📄 批量导入（CSV / Excel）", "🗺️ 地图选点"],
+    horizontal=True)
+txt, up = "", None
 
-with tab_text:
+if input_mode == "✍️ 直接输入":
     txt = st.text_area(
         "每行一个点（按行的先后作为途经顺序）", height=170,
         placeholder="支持三种格式，可混用：\n翠湖公园\n昆明站,102.720287,25.018662\n102.690951,25.039813",
     )
     st.caption("分隔符支持英文/中文逗号、空格、Tab。多条线路请用『批量导入』的分组列。")
 
-with tab_file:
+elif input_mode == "📄 批量导入（CSV / Excel）":
     up = st.file_uploader("上传 CSV 或 Excel", type=["csv", "xlsx", "xls"])
     tpl = ("名称,经度,纬度,线路\n昆明站,102.720287,25.018662,线路1\n"
            "翠湖公园,,,线路1\n云南大学,,,线路1\n"
@@ -110,7 +112,7 @@ with tab_file:
         except Exception as e:
             st.error(f"文件解析失败: {e}")
 
-with tab_map:
+else:
     import folium
     from streamlit_folium import st_folium
 
@@ -189,19 +191,25 @@ run = st.button("🚀 生成导航路线", type="primary", use_container_width=T
 # ---------------- 生成 ----------------
 if run:
     try:
-        picked_now = st.session_state.get("picked", [])
-        if up is not None:
+        if input_mode == "📄 批量导入（CSV / Excel）":
+            if up is None:
+                st.warning("请先上传 CSV/Excel 文件")
+                st.stop()
             raw_pts, _ = nc.read_table(io.BytesIO(up.getvalue()), up.name)
             src_note = f"文件 {up.name}"
-        elif picked_now:
+        elif input_mode == "🗺️ 地图选点":
+            picked_now = st.session_state.get("picked", [])
+            if not picked_now:
+                st.warning("请先在地图上添加点位")
+                st.stop()
             raw_pts = [dict(p) for p in picked_now]
             src_note = "地图选点"
-        elif txt.strip():
+        else:
+            if not txt.strip():
+                st.warning("请先输入点位")
+                st.stop()
             raw_pts = nc.parse_text_input(txt)
             src_note = "手动输入"
-        else:
-            st.warning("请先输入点位、上传文件或在地图上选点")
-            st.stop()
 
         if len(raw_pts) < 2:
             st.warning("至少需要 2 个点才能规划路线")
