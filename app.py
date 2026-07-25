@@ -5,6 +5,8 @@
 import datetime
 import io
 import os
+import shutil
+import tempfile
 
 import pandas as pd
 import streamlit as st
@@ -232,7 +234,10 @@ if run:
             st.error("没有成功规划出任何路线：\n\n" + "\n\n".join(errors))
             st.stop()
 
-        out_dir = os.path.join("output", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        if os.name == "nt":  # 本地运行: 落盘留档
+            out_dir = os.path.join("output", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        else:  # 云端: 临时目录, 用完即删, 不占服务器空间
+            out_dir = tempfile.mkdtemp(prefix="navi_")
         shp_files = nc.export_shp(points, routes, out_dir, prefix)
         geo_files = nc.export_geojson(points, routes, out_dir, prefix)
         map_path = os.path.join(out_dir, f"{prefix}_map.html")
@@ -247,11 +252,25 @@ if run:
         shp_zip = nc.zip_files(shp_files, os.path.join(out_dir, f"{prefix}_shp.zip"))
         geo_zip = nc.zip_files(geo_files, os.path.join(out_dir, f"{prefix}_geojson.zip"))
 
+        with open(shp_zip, "rb") as fh:
+            shp_zip_bytes = fh.read()
+        with open(geo_zip, "rb") as fh:
+            geo_zip_bytes = fh.read()
+        with open(map_path, "r", encoding="utf-8") as fh:
+            map_html = fh.read()
+        png_bytes = None
+        if png_path:
+            with open(png_path, "rb") as fh:
+                png_bytes = fh.read()
+        if os.name != "nt":
+            shutil.rmtree(out_dir, ignore_errors=True)
+            out_dir = None
+
         st.session_state["result"] = {
             "points": points, "routes": routes, "failed": failed, "errors": errors,
-            "out_dir": out_dir, "shp_zip": shp_zip, "geo_zip": geo_zip,
-            "map_path": map_path, "png_path": png_path,
-            "src_note": src_note, "prefix": prefix,
+            "out_dir": out_dir, "shp_zip_bytes": shp_zip_bytes,
+            "geo_zip_bytes": geo_zip_bytes, "map_html": map_html,
+            "png_bytes": png_bytes, "src_note": src_note, "prefix": prefix,
         }
     except Exception as e:
         st.error(f"生成失败: {e}")
@@ -283,32 +302,28 @@ if res:
             ["group", "seq", "name", "lon", "lat", "source", "display"]],
             use_container_width=True)
 
-    with open(res["map_path"], "r", encoding="utf-8") as fh:
-        components.html(fh.read(), height=560)
+    components.html(res["map_html"], height=560)
 
-    if res.get("png_path"):
+    if res.get("png_bytes"):
         with st.expander("🖼️ 制图版轨迹地图预览（图例·比例尺·指北针，300dpi）", expanded=True):
-            st.image(res["png_path"], use_container_width=True)
+            st.image(res["png_bytes"], use_container_width=True)
 
-    if os.name == "nt":
+    if res.get("out_dir"):
         st.caption(f"所有文件已保存到本地目录：`{os.path.abspath(res['out_dir'])}`")
     else:
-        st.caption("⬇️ 文件已在服务器端生成（应用重启后会清空），请用下面的按钮下载保存到自己电脑。")
+        st.caption("⬇️ 结果在内存中生成（不占服务器存储），点击按钮即可下载。")
+    pfx = res.get("prefix", "navi")
     d1, d2, d3, d4 = st.columns(4)
-    with open(res["shp_zip"], "rb") as fh:
-        d1.download_button("⬇️ SHP（点+线，zip）", fh.read(),
-                           os.path.basename(res["shp_zip"]), "application/zip",
+    d1.download_button("⬇️ SHP（点+线，zip）", res["shp_zip_bytes"],
+                       f"{pfx}_shp.zip", "application/zip",
+                       use_container_width=True)
+    d2.download_button("⬇️ GeoJSON（zip）", res["geo_zip_bytes"],
+                       f"{pfx}_geojson.zip", "application/zip",
+                       use_container_width=True)
+    d3.download_button("⬇️ 交互地图（HTML）", res["map_html"].encode("utf-8"),
+                       f"{pfx}_map.html", "text/html",
+                       use_container_width=True)
+    if res.get("png_bytes"):
+        d4.download_button("⬇️ 轨迹地图（PNG）", res["png_bytes"],
+                           f"{pfx}_map.png", "image/png",
                            use_container_width=True)
-    with open(res["geo_zip"], "rb") as fh:
-        d2.download_button("⬇️ GeoJSON（zip）", fh.read(),
-                           os.path.basename(res["geo_zip"]), "application/zip",
-                           use_container_width=True)
-    with open(res["map_path"], "rb") as fh:
-        d3.download_button("⬇️ 交互地图（HTML）", fh.read(),
-                           os.path.basename(res["map_path"]), "text/html",
-                           use_container_width=True)
-    if res.get("png_path"):
-        with open(res["png_path"], "rb") as fh:
-            d4.download_button("⬇️ 轨迹地图（PNG）", fh.read(),
-                               os.path.basename(res["png_path"]), "image/png",
-                               use_container_width=True)
