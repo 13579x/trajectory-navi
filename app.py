@@ -290,7 +290,10 @@ if res:
         with st.expander("🖼️ 制图版轨迹地图预览（图例·比例尺·指北针，300dpi）", expanded=True):
             st.image(res["png_path"], use_container_width=True)
 
-    st.caption(f"所有文件已保存到本地目录：`{os.path.abspath(res['out_dir'])}`")
+    if os.name == "nt":
+        st.caption(f"所有文件已保存到本地目录：`{os.path.abspath(res['out_dir'])}`")
+    else:
+        st.caption("⬇️ 文件已在服务器端生成（应用重启后会清空），请用下面的按钮下载保存到自己电脑。")
     d1, d2, d3, d4 = st.columns(4)
     with open(res["shp_zip"], "rb") as fh:
         d1.download_button("⬇️ SHP（点+线，zip）", fh.read(),
