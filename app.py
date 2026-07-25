@@ -122,10 +122,10 @@ else:
 
     c_map, c_form = st.columns([5, 3])
     with c_map:
-        # 底图只建一次且不再改动 -> 组件不重挂载, 缩放/平移由浏览器端保持, 不会刷新
-        if "picker_base" not in st.session_state:
-            st.session_state.picker_base = folium.Map(
-                location=[30.0, 105.0], zoom_start=5, control_scale=True)
+        # 每次重跑都用相同参数新建底图 -> 组件内容不变不重载, 视野由浏览器端保持;
+        # 动态标记经 feature_group_to_add 增量更新
+        base_map = folium.Map(location=[30.0, 105.0], zoom_start=5,
+                              control_scale=True)
         fg = folium.FeatureGroup(name="选点")
         for i, p in enumerate(picked):
             folium.Marker(
@@ -140,7 +140,7 @@ else:
         if lc_prev:
             folium.Marker([lc_prev["lat"], lc_prev["lng"]], tooltip="待添加",
                           icon=folium.Icon(color="orange", icon="plus")).add_to(fg)
-        mout = st_folium(st.session_state.picker_base, height=450,
+        mout = st_folium(base_map, height=450,
                          use_container_width=True, key="picker",
                          feature_group_to_add=fg,
                          returned_objects=["last_clicked"])
